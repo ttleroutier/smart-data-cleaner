@@ -1,17 +1,17 @@
-Voici une version enrichie de `app.py`, en anglais, structurée par sections claires, avec le principe **"See before you act"** appliqué à chaque action.
+#Voici une version enrichie de `app.py`, en anglais, structurée par sections claires, avec le principe **"See before you act"** appliqué à chaque action.
 
-Ce fichier reste lisible car il **délègue toute la logique** à `diagnostics.py` et `cleaner.py`. Il ne contient que l’interface.
+#Ce fichier reste lisible car il **délègue toute la logique** à `diagnostics.py` et `cleaner.py`. Il ne contient que l’interface.
 
-```python
-"""
-app.py
-Smart Data Cleaner - main Streamlit interface.
+#```python
+#"""
+#app.py
+#Smart Data Cleaner - main Streamlit interface.
 
-Structure:
-- Sidebar: upload + navigation
-- Main area: one section per cleaning action
-- Each section shows STATISTICS first, then applies changes
-"""
+#Structure:
+#- Sidebar: upload + navigation
+#- Main area: one section per cleaning action
+#- Each section shows STATISTICS first, then applies changes
+#"""
 
 import streamlit as st
 import pandas as pd
@@ -38,6 +38,8 @@ if "df" not in st.session_state:
     st.session_state.df = None
 if "original_df" not in st.session_state:
     st.session_state.original_df = None
+if "history" not in st.session_state:
+    st.session_state.history = []
 
 
 # -----------------------------
@@ -76,21 +78,32 @@ action = st.sidebar.radio(
         "Text cleaning",
         "Dates",
         "Express cleaning",
+        "History",
         "Compare & Download",
     ],
 )
+
 
 
 # -----------------------------
 # HELPERS
 # -----------------------------
 
+from datetime import datetime
+
+
 def apply_change(new_df: pd.DataFrame, message: str):
-    """Save the modified DataFrame and show a success message."""
+    """Save the modified DataFrame, keep history, and show a message."""
+    # Save previous state in history
+    st.session_state.history.append({
+        "timestamp": datetime.now().strftime("%H:%M:%S"),
+        "description": message,
+        "snapshot": st.session_state.df.copy(),
+    })
+
     st.session_state.df = new_df
     st.success(message)
     st.rerun()
-
 
 # -----------------------------
 # OVERVIEW
@@ -337,6 +350,55 @@ elif action == "Express cleaning":
 
 
 # -----------------------------
+# HISTORY
+# -----------------------------
+
+elif action == "History":
+    st.subheader("Action history")
+
+    if not st.session_state.history:
+        st.info("No actions have been applied yet.")
+    else:
+        st.write(f"Total actions applied: {len(st.session_state.history)}")
+
+        # Show history table
+        history_df = pd.DataFrame([
+            {"step": i + 1, "time": h["timestamp"], "action": h["description"]}
+            for i, h in enumerate(st.session_state.history)
+        ])
+        st.dataframe(history_df, use_container_width=True)
+
+        st.markdown("### Undo the last action")
+        if st.button("↩ Undo last action"):
+            last = st.session_state.history.pop()
+            st.session_state.df = last["snapshot"]
+            st.success(f"Reverted: {last['description']}")
+            st.rerun()
+
+        st.markdown("### Revert to a specific step")
+        step = st.number_input(
+            "Go back to the dataset BEFORE this step number",
+            min_value=1,
+            max_value=len(st.session_state.history),
+            step=1,
+        )
+        if st.button("↩ Revert to this step"):
+            target = st.session_state.history[step - 1]
+            # Restore the snapshot taken before that step
+            st.session_state.df = target["snapshot"]
+            # Truncate history so future = clean
+            st.session_state.history = st.session_state.history[: step - 1]
+            st.success(f"Reverted to state before step {step}.")
+            st.rerun()
+
+        st.markdown("### Reset everything")
+        if st.button("🔄 Reset to original dataset"):
+            st.session_state.df = st.session_state.original_df.copy()
+            st.session_state.history = []
+            st.success("All actions cleared. Dataset reset to original.")
+            st.rerun()
+
+# -----------------------------
 # COMPARE & DOWNLOAD
 # -----------------------------
 
@@ -368,28 +430,3 @@ elif action == "Compare & Download":
         st.rerun()
 ```
 
-## Ce que fait cette version
-
-- Upload d’un fichier CSV ou Excel dans la barre latérale
-- Menu de navigation clair avec 9 sections
-- Pour chaque action :
-  - Statistiques et aperçu visibles **avant** modification
-  - Bouton **Apply** pour confirmer
-- Comparaison **avant / après**
-- Téléchargement du CSV nettoyé
-- Bouton **Reset** pour revenir au dataset original
-
-## Pourquoi cette structure est bonne pour toi
-
-- Chaque section est **indépendante** → tu peux ajouter/enlever facilement
-- Le fichier reste **lisible** malgré la richesse fonctionnelle
-- L’IA (Cursor, ChatGPT) peut modifier une seule section à la fois
-- La logique reste dans `cleaner.py` et `diagnostics.py`, jamais dupliquée ici
-
-## Étape suivante possible
-
-Souhaites-tu que je te génère maintenant :
-
-1. Un **assistant IA intégré** (chat) qui explique chaque action et recommande des choix
-2. Un **rapport PDF** téléchargeable listant toutes les transformations appliquées
-3. Ou un **historique des actions** avec bouton "Annuler la dernière action"
